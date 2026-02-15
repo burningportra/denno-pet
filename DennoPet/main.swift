@@ -151,12 +151,18 @@ class PetScene: SKScene {
         body.glowWidth = 3
         creature.addChild(body)
         
-        // Scan-line overlay
+        // Scan-line overlay — clipped to body shape
+        let scanCrop = SKCropNode()
+        let maskShape = SKShapeNode(path: bodyPath)
+        maskShape.fillColor = .white
+        maskShape.strokeColor = .clear
+        scanCrop.maskNode = maskShape
         scanLines = createScanLineSprite()
         scanLines.position = CGPoint(x: 0, y: 16)
-        scanLines.zPosition = 10
         scanLines.alpha = 0.25
-        creature.addChild(scanLines)
+        scanCrop.addChild(scanLines)
+        scanCrop.zPosition = 10
+        creature.addChild(scanCrop)
         
         // Eyes — teal glow, the only color
         leftEye = SKShapeNode(circleOfRadius: 3.5)
