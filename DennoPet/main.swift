@@ -19,7 +19,6 @@ class PetWindow: NSWindow {
         )
         self.setFrame(frame, display: false)
         self.setFrameOrigin(frame.origin)
-        
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
@@ -30,34 +29,21 @@ class PetWindow: NSWindow {
     }
 }
 
-// MARK: - Click-Through SKView
-
 class PetSKView: SKView {
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        return nil
-    }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 // MARK: - Creature State
 
 enum CreatureState: String {
-    case idle
-    case wanderLeft
-    case wanderRight
-    case curious
-    case startle
-    case glitch
-    case sleep
-    case windowWalk    // walking on top of a window title bar
-    case windowHop     // jumping between windows
-    case wakeUp        // transitioning from sleep
+    case idle, wanderLeft, wanderRight, curious, startle, glitch
+    case sleep, windowWalk, windowHop, wakeUp
+    case flee  // running from Densuke
 }
 
-// MARK: - Window Ledge (title bar surfaces to walk on)
-
 struct WindowLedge {
-    let x: CGFloat      // left edge
-    let y: CGFloat      // top of window (where creature walks)
+    let x: CGFloat
+    let y: CGFloat
     let width: CGFloat
     let windowName: String
 }
@@ -73,158 +59,103 @@ class SoundGenerator {
         audioEngine = AVAudioEngine()
         playerNode = AVAudioPlayerNode()
         audioEngine.attach(playerNode)
-        
         let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: format)
         audioEngine.mainMixerNode.outputVolume = 0.15
-        
         try? audioEngine.start()
     }
     
-    func playChirp(frequency: Float = 1200, duration: Float = 0.06) {
+    private func makeBuffer(duration: Float, generator: (Float, Float) -> Float) {
         let sampleRate: Float = 44100
         let frameCount = AVAudioFrameCount(sampleRate * duration)
         guard let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1),
               let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
         buffer.frameLength = frameCount
-        
         let data = buffer.floatChannelData![0]
         for i in 0..<Int(frameCount) {
-            let t = Float(i) / sampleRate
-            let envelope = 1.0 - (t / duration) // linear decay
-            // Digital chirp: mix of sine + slight noise
-            let sine = sin(2.0 * .pi * frequency * t)
-            let harmonic = sin(2.0 * .pi * frequency * 2.3 * t) * 0.3
-            data[i] = (sine + harmonic) * envelope * 0.3
+            data[i] = generator(Float(i) / sampleRate, duration)
         }
-        
         playerNode.stop()
         playerNode.scheduleBuffer(buffer, completionHandler: nil)
         playerNode.play()
+    }
+    
+    func playChirp(frequency: Float = 1200, duration: Float = 0.06) {
+        makeBuffer(duration: duration) { t, dur in
+            let env = 1.0 - (t / dur)
+            return (sin(2 * .pi * frequency * t) + sin(2 * .pi * frequency * 2.3 * t) * 0.3) * env * 0.3
+        }
     }
     
     func playGlitchSound() {
-        let sampleRate: Float = 44100
-        let duration: Float = 0.12
-        let frameCount = AVAudioFrameCount(sampleRate * duration)
-        guard let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1),
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
-        buffer.frameLength = frameCount
-        
-        let data = buffer.floatChannelData![0]
-        for i in 0..<Int(frameCount) {
-            let t = Float(i) / sampleRate
-            let envelope = max(0, 1.0 - (t / duration))
-            // Harsh digital noise burst
+        makeBuffer(duration: 0.12) { t, dur in
+            let env = max(0, 1.0 - (t / dur))
             let noise = Float.random(in: -1...1)
-            let buzz = sin(2.0 * .pi * 180 * t) * 0.5
-            let crackle = (i % Int.random(in: 30...60) == 0) ? Float.random(in: -0.8...0.8) : 0
-            data[i] = (noise * 0.3 + buzz + crackle) * envelope * 0.25
+            let buzz = sin(2 * .pi * 180 * t) * 0.5
+            return (noise * 0.3 + buzz) * env * 0.25
         }
-        
-        playerNode.stop()
-        playerNode.scheduleBuffer(buffer, completionHandler: nil)
-        playerNode.play()
     }
     
     func playHappyChirp() {
-        // Rising two-tone chirp
-        let sampleRate: Float = 44100
-        let duration: Float = 0.15
-        let frameCount = AVAudioFrameCount(sampleRate * duration)
-        guard let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1),
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
-        buffer.frameLength = frameCount
-        
-        let data = buffer.floatChannelData![0]
-        for i in 0..<Int(frameCount) {
-            let t = Float(i) / sampleRate
-            let envelope = max(0, 1.0 - (t / duration) * 0.5)
-            let freq = 800 + (t / duration) * 600 // rising pitch
-            let sine = sin(2.0 * .pi * freq * t)
-            data[i] = sine * envelope * 0.25
+        makeBuffer(duration: 0.15) { t, dur in
+            let env = max(0, 1.0 - (t / dur) * 0.5)
+            let freq = 800 + (t / dur) * 600
+            return sin(2 * .pi * freq * t) * env * 0.25
         }
-        
-        playerNode.stop()
-        playerNode.scheduleBuffer(buffer, completionHandler: nil)
-        playerNode.play()
     }
     
     func playSleepSound() {
-        // Soft descending tone
-        let sampleRate: Float = 44100
-        let duration: Float = 0.3
-        let frameCount = AVAudioFrameCount(sampleRate * duration)
-        guard let format = AVAudioFormat(standardFormatWithSampleRate: Double(sampleRate), channels: 1),
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
-        buffer.frameLength = frameCount
-        
-        let data = buffer.floatChannelData![0]
-        for i in 0..<Int(frameCount) {
-            let t = Float(i) / sampleRate
-            let envelope = max(0, 1.0 - (t / duration))
-            let freq: Float = 600 - (t / duration) * 300 // descending
-            let sine = sin(2.0 * .pi * freq * t)
-            data[i] = sine * envelope * envelope * 0.15 // quadratic decay = softer
+        makeBuffer(duration: 0.3) { t, dur in
+            let env = max(0, 1.0 - (t / dur))
+            let freq: Float = 600 - (t / dur) * 300
+            return sin(2 * .pi * freq * t) * env * env * 0.15
         }
-        
-        playerNode.stop()
-        playerNode.scheduleBuffer(buffer, completionHandler: nil)
-        playerNode.play()
+    }
+    
+    func playBark() {
+        makeBuffer(duration: 0.08) { t, dur in
+            let env = max(0, 1.0 - (t / dur))
+            let freq: Float = 400 + sin(t * 80) * 100
+            return sin(2 * .pi * freq * t) * env * 0.2
+        }
     }
 }
 
-// MARK: - System State Monitor
+// MARK: - System Monitor
 
 class SystemMonitor {
     static let shared = SystemMonitor()
-    
     var batteryLevel: Float = 1.0
     var isOnBattery: Bool = false
-    var isDarkMode: Bool = false
     var hour: Int = 12
     
     func update() {
-        // Battery
         if let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
            let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [Any],
            let first = sources.first,
            let desc = IOPSGetPowerSourceDescription(snapshot, first as CFTypeRef)?.takeUnretainedValue() as? [String: Any] {
-            if let capacity = desc[kIOPSCurrentCapacityKey] as? Int,
-               let max = desc[kIOPSMaxCapacityKey] as? Int, max > 0 {
-                batteryLevel = Float(capacity) / Float(max)
+            if let cap = desc[kIOPSCurrentCapacityKey] as? Int, let mx = desc[kIOPSMaxCapacityKey] as? Int, mx > 0 {
+                batteryLevel = Float(cap) / Float(mx)
             }
-            if let source = desc[kIOPSPowerSourceStateKey] as? String {
-                isOnBattery = (source == kIOPSBatteryPowerValue)
-            }
+            if let src = desc[kIOPSPowerSourceStateKey] as? String { isOnBattery = (src == kIOPSBatteryPowerValue) }
         }
-        
-        // Dark mode
-        let appearance = NSApp.effectiveAppearance.name
-        isDarkMode = appearance == .darkAqua || appearance == .vibrantDark ||
-                     appearance == .accessibilityHighContrastDarkAqua ||
-                     appearance == .accessibilityHighContrastVibrantDark
-        
-        // Hour
         hour = Calendar.current.component(.hour, from: Date())
     }
-    
     var isNightTime: Bool { hour >= 22 || hour < 7 }
     var isLowBattery: Bool { isOnBattery && batteryLevel < 0.2 }
 }
 
-// MARK: - Pet Scene
+// MARK: - Illegal (Creature Entity)
 
-class PetScene: SKScene {
-    var creature: SKNode!
-    var body: SKShapeNode!
-    var bodyGhost1: SKShapeNode!
-    var bodyGhost2: SKShapeNode!
-    var leftEye: SKShapeNode!
-    var rightEye: SKShapeNode!
-    var noDataLabel: SKLabelNode!
-    var noDataLabel2: SKLabelNode!
-    var scanLines: SKSpriteNode!
+class Illegal {
+    let node: SKNode
+    let body: SKShapeNode
+    let ghost1: SKShapeNode
+    let ghost2: SKShapeNode
+    let leftEye: SKShapeNode
+    let rightEye: SKShapeNode
+    let noDataLabel: SKLabelNode
+    let scanLines: SKSpriteNode
     var trailEmitter: SKEmitterNode?
     var dustEmitter: SKEmitterNode?
     var sleepZzz: SKLabelNode?
@@ -234,154 +165,96 @@ class PetScene: SKScene {
     var nextStateChange: TimeInterval = 3.0
     var glitchTimer: TimeInterval = 0
     var edgeGlitchIntensity: CGFloat = 0
-    var lastMousePosition: CGPoint = .zero
-    var lastMouseTime: TimeInterval = 0
     var isMoving: Bool = false
-    var lastCreatureX: CGFloat = 0
-    var inactivityTimer: TimeInterval = 0
-    var lastInteractionTime: TimeInterval = 0
-    var systemCheckTimer: TimeInterval = 0
-    var soundEnabled: Bool = true
-    var windowLedges: [WindowLedge] = []
+    var lastX: CGFloat = 0
     var currentLedge: WindowLedge? = nil
     var targetLedgeY: CGFloat? = nil
-    var windowScanTimer: TimeInterval = 0
+    var fleeTarget: CGFloat? = nil
     
-    let groundY: CGFloat = 60
-    let edgePanicZone: CGFloat = 80
-    let sleepAfterSeconds: TimeInterval = 180 // 3 min inactivity → sleep
+    let scale: CGFloat
+    let groundY: CGFloat
+    let isLeader: Bool
     
-    override func didMove(to view: SKView) {
-        backgroundColor = .clear
-        setupCreature()
-        scheduleNextState()
-        lastInteractionTime = CACurrentMediaTime()
-    }
-    
-    // MARK: - Body Path
-    
-    func createBodyPath() -> CGPath {
-        let bodyPath = CGMutablePath()
-        bodyPath.move(to: CGPoint(x: -22, y: -2))
-        bodyPath.addCurve(to: CGPoint(x: -18, y: 18),
-                         control1: CGPoint(x: -28, y: 5),
-                         control2: CGPoint(x: -24, y: 16))
-        bodyPath.addCurve(to: CGPoint(x: -5, y: 34),
-                         control1: CGPoint(x: -14, y: 22),
-                         control2: CGPoint(x: -10, y: 36))
-        bodyPath.addCurve(to: CGPoint(x: 8, y: 32),
-                         control1: CGPoint(x: 0, y: 37),
-                         control2: CGPoint(x: 5, y: 35))
-        bodyPath.addCurve(to: CGPoint(x: 20, y: 16),
-                         control1: CGPoint(x: 14, y: 30),
-                         control2: CGPoint(x: 22, y: 22))
-        bodyPath.addCurve(to: CGPoint(x: 18, y: 0),
-                         control1: CGPoint(x: 24, y: 10),
-                         control2: CGPoint(x: 22, y: 3))
-        bodyPath.addCurve(to: CGPoint(x: 5, y: -4),
-                         control1: CGPoint(x: 14, y: -3),
-                         control2: CGPoint(x: 10, y: -5))
-        bodyPath.addCurve(to: CGPoint(x: -8, y: -3),
-                         control1: CGPoint(x: 0, y: -6),
-                         control2: CGPoint(x: -4, y: -4))
-        bodyPath.addCurve(to: CGPoint(x: -22, y: -2),
-                         control1: CGPoint(x: -14, y: -4),
-                         control2: CGPoint(x: -18, y: -3))
-        bodyPath.closeSubpath()
-        return bodyPath
-    }
-    
-    func setupCreature() {
-        creature = SKNode()
-        creature.name = "creature"
-        creature.position = CGPoint(x: size.width / 2, y: groundY)
-        lastCreatureX = creature.position.x
+    init(scale: CGFloat = 1.0, groundY: CGFloat = 60, isLeader: Bool = false) {
+        self.scale = scale
+        self.groundY = groundY
+        self.isLeader = isLeader
         
-        let bodyPath = createBodyPath()
+        node = SKNode()
+        node.name = "illegal"
+        node.setScale(scale)
         
-        // Chromatic aberration ghost layers
-        bodyGhost1 = SKShapeNode(path: bodyPath)
-        bodyGhost1.fillColor = NSColor(red: 0.8, green: 0.1, blue: 0.1, alpha: 0.3)
-        bodyGhost1.strokeColor = .clear
-        bodyGhost1.position = CGPoint(x: -3, y: 0)
-        bodyGhost1.alpha = 0
-        bodyGhost1.zPosition = -1
-        creature.addChild(bodyGhost1)
+        let bodyPath = Illegal.makeBodyPath(scale: 1.0)
         
-        bodyGhost2 = SKShapeNode(path: bodyPath)
-        bodyGhost2.fillColor = NSColor(red: 0.1, green: 0.1, blue: 0.9, alpha: 0.3)
-        bodyGhost2.strokeColor = .clear
-        bodyGhost2.position = CGPoint(x: 3, y: 0)
-        bodyGhost2.alpha = 0
-        bodyGhost2.zPosition = -1
-        creature.addChild(bodyGhost2)
+        // Chromatic ghosts
+        ghost1 = SKShapeNode(path: bodyPath)
+        ghost1.fillColor = NSColor(red: 0.8, green: 0.1, blue: 0.1, alpha: 0.3)
+        ghost1.strokeColor = .clear
+        ghost1.position = CGPoint(x: -3, y: 0)
+        ghost1.alpha = 0
+        ghost1.zPosition = -1
+        node.addChild(ghost1)
         
-        // Main body
+        ghost2 = SKShapeNode(path: bodyPath)
+        ghost2.fillColor = NSColor(red: 0.1, green: 0.1, blue: 0.9, alpha: 0.3)
+        ghost2.strokeColor = .clear
+        ghost2.position = CGPoint(x: 3, y: 0)
+        ghost2.alpha = 0
+        ghost2.zPosition = -1
+        node.addChild(ghost2)
+        
+        // Body
         body = SKShapeNode(path: bodyPath)
         body.fillColor = NSColor(red: 0.08, green: 0.12, blue: 0.15, alpha: 0.82)
         body.strokeColor = NSColor(red: 0.2, green: 0.35, blue: 0.4, alpha: 0.35)
         body.lineWidth = 1.0
         body.glowWidth = 3
-        creature.addChild(body)
+        node.addChild(body)
         
-        // Scan-line overlay clipped to body
+        // Scan lines clipped
         let scanCrop = SKCropNode()
-        let maskShape = SKShapeNode(path: bodyPath)
-        maskShape.fillColor = .white
-        maskShape.strokeColor = .clear
-        scanCrop.maskNode = maskShape
-        scanLines = createScanLineSprite()
+        let mask = SKShapeNode(path: bodyPath)
+        mask.fillColor = .white; mask.strokeColor = .clear
+        scanCrop.maskNode = mask
+        scanLines = Illegal.makeScanLines()
         scanLines.position = CGPoint(x: 0, y: 16)
         scanLines.alpha = 0.25
         scanCrop.addChild(scanLines)
         scanCrop.zPosition = 10
-        creature.addChild(scanCrop)
+        node.addChild(scanCrop)
         
         // Eyes
-        leftEye = SKShapeNode(circleOfRadius: 3.5)
+        let eyeRadius: CGFloat = 3.5
+        leftEye = SKShapeNode(circleOfRadius: eyeRadius)
         leftEye.fillColor = NSColor(red: 0.4, green: 0.85, blue: 0.8, alpha: 0.95)
         leftEye.strokeColor = .clear
         leftEye.position = CGPoint(x: -7, y: 20)
-        leftEye.glowWidth = 4
-        leftEye.zPosition = 20
-        creature.addChild(leftEye)
+        leftEye.glowWidth = 4; leftEye.zPosition = 20
+        node.addChild(leftEye)
         
-        rightEye = SKShapeNode(circleOfRadius: 3.5)
+        rightEye = SKShapeNode(circleOfRadius: eyeRadius)
         rightEye.fillColor = NSColor(red: 0.4, green: 0.85, blue: 0.8, alpha: 0.95)
         rightEye.strokeColor = .clear
         rightEye.position = CGPoint(x: 7, y: 20)
-        rightEye.glowWidth = 4
-        rightEye.zPosition = 20
-        creature.addChild(rightEye)
+        rightEye.glowWidth = 4; rightEye.zPosition = 20
+        node.addChild(rightEye)
         
-        // NO DATA labels
+        // NO DATA
         noDataLabel = SKLabelNode(text: "NO DATA")
         noDataLabel.fontName = "Menlo-Bold"
         noDataLabel.fontSize = 8
         noDataLabel.fontColor = NSColor(red: 0.9, green: 0.95, blue: 0.9, alpha: 0.9)
-        noDataLabel.position = CGPoint(x: 0, y: 18)
-        noDataLabel.alpha = 0
-        noDataLabel.zPosition = 30
-        creature.addChild(noDataLabel)
+        noDataLabel.position = CGPoint(x: 0, y: 14)
+        noDataLabel.alpha = 0; noDataLabel.zPosition = 30
+        node.addChild(noDataLabel)
         
-        noDataLabel2 = SKLabelNode(text: "NO DATA")
-        noDataLabel2.fontName = "Menlo-Bold"
-        noDataLabel2.fontSize = 6
-        noDataLabel2.fontColor = NSColor(red: 0.9, green: 0.95, blue: 0.9, alpha: 0.7)
-        noDataLabel2.position = CGPoint(x: 2, y: 8)
-        noDataLabel2.alpha = 0
-        noDataLabel2.zPosition = 30
-        creature.addChild(noDataLabel2)
-        
-        // Sleep Zzz indicator (hidden)
+        // Sleep Zzz
         sleepZzz = SKLabelNode(text: "z")
-        sleepZzz?.fontName = "Menlo"
-        sleepZzz?.fontSize = 10
-        sleepZzz?.fontColor = NSColor(red: 0.4, green: 0.7, blue: 0.65, alpha: 0.6)
-        sleepZzz?.position = CGPoint(x: 15, y: 30)
-        sleepZzz?.alpha = 0
-        sleepZzz?.zPosition = 25
-        creature.addChild(sleepZzz!)
+        sleepZzz!.fontName = "Menlo"; sleepZzz!.fontSize = 10
+        sleepZzz!.fontColor = NSColor(red: 0.4, green: 0.7, blue: 0.65, alpha: 0.6)
+        sleepZzz!.position = CGPoint(x: 15, y: 30)
+        sleepZzz!.alpha = 0; sleepZzz!.zPosition = 25
+        node.addChild(sleepZzz!)
         
         // Breathing
         let breathe = SKAction.sequence([
@@ -390,613 +263,740 @@ class PetScene: SKScene {
         ])
         body.run(SKAction.repeatForever(breathe), withKey: "breathe")
         
-        // Eye blink
-        let blinkSequence = SKAction.sequence([
+        // Blink
+        let blink = SKAction.sequence([
             SKAction.wait(forDuration: 3.0, withRange: 4.0),
             SKAction.scaleY(to: 0.1, duration: 0.08),
             SKAction.scaleY(to: 1.0, duration: 0.12),
         ])
-        leftEye.run(SKAction.repeatForever(blinkSequence), withKey: "blink")
-        rightEye.run(SKAction.repeatForever(blinkSequence), withKey: "blink")
+        leftEye.run(SKAction.repeatForever(blink), withKey: "blink")
+        rightEye.run(SKAction.repeatForever(blink), withKey: "blink")
         
-        // Ambient dust
-        dustEmitter = createDigitalDust()
-        if let dust = dustEmitter {
-            dust.position = CGPoint(x: 0, y: 15)
-            dust.zPosition = 5
-            creature.addChild(dust)
-        }
+        // Dust
+        dustEmitter = Illegal.makeDust()
+        if let d = dustEmitter { d.position = CGPoint(x: 0, y: 15); d.zPosition = 5; node.addChild(d) }
         
         // Trail
-        trailEmitter = createDennoTrail()
-        if let trail = trailEmitter {
-            trail.position = CGPoint(x: 0, y: 0)
-            trail.zPosition = -2
-            trail.particleBirthRate = 0
-            creature.addChild(trail)
-        }
-        
-        addChild(creature)
+        trailEmitter = Illegal.makeTrail()
+        if let t = trailEmitter { t.position = .zero; t.zPosition = -2; t.particleBirthRate = 0; node.addChild(t) }
     }
     
-    // MARK: - Scan Lines
+    // MARK: - Static Factories
     
-    func createScanLineSprite() -> SKSpriteNode {
-        let w = 50
-        let h = 44
-        let image = NSImage(size: NSSize(width: w, height: h))
-        image.lockFocus()
-        NSColor.clear.setFill()
-        NSRect(origin: .zero, size: NSSize(width: w, height: h)).fill()
+    static func makeBodyPath(scale: CGFloat = 1.0) -> CGPath {
+        let p = CGMutablePath()
+        p.move(to: CGPoint(x: -22, y: -2))
+        p.addCurve(to: CGPoint(x: -18, y: 18), control1: CGPoint(x: -28, y: 5), control2: CGPoint(x: -24, y: 16))
+        p.addCurve(to: CGPoint(x: -5, y: 34), control1: CGPoint(x: -14, y: 22), control2: CGPoint(x: -10, y: 36))
+        p.addCurve(to: CGPoint(x: 8, y: 32), control1: CGPoint(x: 0, y: 37), control2: CGPoint(x: 5, y: 35))
+        p.addCurve(to: CGPoint(x: 20, y: 16), control1: CGPoint(x: 14, y: 30), control2: CGPoint(x: 22, y: 22))
+        p.addCurve(to: CGPoint(x: 18, y: 0), control1: CGPoint(x: 24, y: 10), control2: CGPoint(x: 22, y: 3))
+        p.addCurve(to: CGPoint(x: 5, y: -4), control1: CGPoint(x: 14, y: -3), control2: CGPoint(x: 10, y: -5))
+        p.addCurve(to: CGPoint(x: -8, y: -3), control1: CGPoint(x: 0, y: -6), control2: CGPoint(x: -4, y: -4))
+        p.addCurve(to: CGPoint(x: -22, y: -2), control1: CGPoint(x: -14, y: -4), control2: CGPoint(x: -18, y: -3))
+        p.closeSubpath()
+        return p
+    }
+    
+    static func makeScanLines() -> SKSpriteNode {
+        let w = 50, h = 44
+        let img = NSImage(size: NSSize(width: w, height: h))
+        img.lockFocus()
+        NSColor.clear.setFill(); NSRect(origin: .zero, size: NSSize(width: w, height: h)).fill()
         for y in stride(from: 0, to: h, by: 3) {
             NSColor(white: 1.0, alpha: 0.4).setFill()
             NSRect(x: 0, y: y, width: w, height: 1).fill()
         }
-        image.unlockFocus()
-        let sprite = SKSpriteNode(texture: SKTexture(image: image))
-        sprite.blendMode = .alpha
-        return sprite
+        img.unlockFocus()
+        let s = SKSpriteNode(texture: SKTexture(image: img)); s.blendMode = .alpha; return s
     }
     
-    // MARK: - Particle Emitters
-    
-    func createDigitalDust() -> SKEmitterNode? {
-        let emitter = SKEmitterNode()
-        emitter.particleBirthRate = 2.5
-        emitter.particleLifetime = 1.8
-        emitter.particleLifetimeRange = 1.0
-        emitter.emissionAngle = .pi / 2
-        emitter.emissionAngleRange = .pi * 0.6
-        emitter.particleSpeed = 4
-        emitter.particleSpeedRange = 6
-        emitter.particleAlpha = 0.35
-        emitter.particleAlphaRange = 0.2
-        emitter.particleAlphaSpeed = -0.2
-        emitter.particleScale = 0.25
-        emitter.particleScaleRange = 0.15
-        emitter.particleColor = NSColor(red: 0.3, green: 0.7, blue: 0.65, alpha: 1.0)
-        emitter.particleColorBlendFactor = 1.0
-        
-        let size = CGSize(width: 3, height: 3)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor.white.setFill()
-        NSRect(origin: .zero, size: size).fill()
-        image.unlockFocus()
-        emitter.particleTexture = SKTexture(image: image)
-        return emitter
+    static func makeSquareTexture(size: Int) -> SKTexture {
+        let s = CGSize(width: size, height: size)
+        let img = NSImage(size: s)
+        img.lockFocus(); NSColor.white.setFill(); NSRect(origin: .zero, size: s).fill(); img.unlockFocus()
+        return SKTexture(image: img)
     }
     
-    func createDennoTrail() -> SKEmitterNode? {
-        let emitter = SKEmitterNode()
-        emitter.particleBirthRate = 12
-        emitter.particleLifetime = 0.8
-        emitter.particleLifetimeRange = 0.4
-        emitter.emissionAngle = -.pi / 2
-        emitter.emissionAngleRange = .pi * 0.4
-        emitter.particleSpeed = 3
-        emitter.particleSpeedRange = 5
-        emitter.particleAlpha = 0.5
-        emitter.particleAlphaRange = 0.2
-        emitter.particleAlphaSpeed = -0.6
-        emitter.particleScale = 0.4
-        emitter.particleScaleRange = 0.3
-        emitter.particleScaleSpeed = -0.2
-        emitter.particleColor = NSColor(red: 0.05, green: 0.08, blue: 0.1, alpha: 1.0)
-        emitter.particleColorBlendFactor = 1.0
-        
-        let size = CGSize(width: 4, height: 4)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor.white.setFill()
-        NSRect(origin: .zero, size: size).fill()
-        image.unlockFocus()
-        emitter.particleTexture = SKTexture(image: image)
-        return emitter
+    static func makeDust() -> SKEmitterNode {
+        let e = SKEmitterNode()
+        e.particleBirthRate = 2.5; e.particleLifetime = 1.8; e.particleLifetimeRange = 1.0
+        e.emissionAngle = .pi/2; e.emissionAngleRange = .pi*0.6
+        e.particleSpeed = 4; e.particleSpeedRange = 6
+        e.particleAlpha = 0.35; e.particleAlphaRange = 0.2; e.particleAlphaSpeed = -0.2
+        e.particleScale = 0.25; e.particleScaleRange = 0.15
+        e.particleColor = NSColor(red: 0.3, green: 0.7, blue: 0.65, alpha: 1); e.particleColorBlendFactor = 1
+        e.particleTexture = makeSquareTexture(size: 3)
+        return e
     }
     
-    func scheduleNextState() {
-        nextStateChange = Double.random(in: 2.0...6.0)
-        stateTimer = 0
+    static func makeTrail() -> SKEmitterNode {
+        let e = SKEmitterNode()
+        e.particleBirthRate = 12; e.particleLifetime = 0.8; e.particleLifetimeRange = 0.4
+        e.emissionAngle = -.pi/2; e.emissionAngleRange = .pi*0.4
+        e.particleSpeed = 3; e.particleSpeedRange = 5
+        e.particleAlpha = 0.5; e.particleAlphaRange = 0.2; e.particleAlphaSpeed = -0.6
+        e.particleScale = 0.4; e.particleScaleRange = 0.3; e.particleScaleSpeed = -0.2
+        e.particleColor = NSColor(red: 0.05, green: 0.08, blue: 0.1, alpha: 1); e.particleColorBlendFactor = 1
+        e.particleTexture = makeSquareTexture(size: 4)
+        return e
     }
     
-    // MARK: - Window Scanning (for window-walking)
+    // MARK: - Glitch
     
-    func scanWindowLedges() {
-        windowLedges.removeAll()
-        guard let screen = NSScreen.main else { return }
-        let screenH = screen.frame.height
+    func triggerGlitch(withNoData: Bool = false, sound: Bool = false) {
+        if sound && withNoData { SoundGenerator.shared.playGlitchSound() }
         
-        let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-        
-        for w in windowList {
-            guard let bounds = w[kCGWindowBounds as String] as? [String: CGFloat],
-                  let layer = w[kCGWindowLayer as String] as? Int,
-                  let ownerName = w[kCGWindowOwnerName as String] as? String else { continue }
-            
-            // Only normal windows (layer 0), skip our own window, menubar, dock
-            guard layer == 0 else { continue }
-            if ownerName == "denno-pet" || ownerName == "Dock" || ownerName == "Window Server" { continue }
-            
-            let x = bounds["X"] ?? 0
-            let y = bounds["Y"] ?? 0
-            let width = bounds["Width"] ?? 0
-            let height = bounds["Height"] ?? 0
-            
-            // Skip tiny windows
-            guard width > 100 && height > 50 else { continue }
-            
-            // Convert from CG coords (top-left origin) to SpriteKit coords (bottom-left)
-            let topInSK = screenH - y
-            
-            let ledge = WindowLedge(x: x, y: topInSK, width: width, windowName: ownerName)
-            windowLedges.append(ledge)
-        }
-        
-        // Sort by height (prefer higher windows for variety)
-        windowLedges.sort { $0.y > $1.y }
+        let seq = SKAction.sequence([
+            SKAction.run { [weak self] in
+                guard let s = self else { return }
+                let off = CGFloat.random(in: 2...5)
+                s.ghost1.position.x = -off; s.ghost2.position.x = off
+                s.ghost1.alpha = 0.5; s.ghost2.alpha = 0.5
+                s.body.fillColor = NSColor(red: 0.02, green: 0.02, blue: 0.03, alpha: 0.95)
+                s.body.glowWidth = 0; s.node.position.x += CGFloat.random(in: -4...4)
+                s.scanLines.alpha = 0.7
+                if withNoData { s.noDataLabel.alpha = 0.9; s.leftEye.alpha = 0; s.rightEye.alpha = 0 }
+            },
+            SKAction.wait(forDuration: 0.04),
+            SKAction.run { [weak self] in self?.body.alpha = CGFloat.random(in: 0.2...0.5) },
+            SKAction.wait(forDuration: 0.03),
+            SKAction.run { [weak self] in
+                guard let s = self else { return }
+                s.body.fillColor = NSColor(red: 0.08, green: 0.12, blue: 0.15, alpha: 0.82)
+                s.body.alpha = 1.0; s.body.glowWidth = 3
+            },
+            SKAction.wait(forDuration: 0.02),
+            SKAction.run { [weak self] in
+                self?.body.fillColor = NSColor(red: 0.02, green: 0.02, blue: 0.03, alpha: 0.95)
+                self?.body.alpha = CGFloat.random(in: 0.2...0.5)
+            },
+            SKAction.wait(forDuration: 0.05),
+            SKAction.run { [weak self] in
+                guard let s = self else { return }
+                s.body.fillColor = NSColor(red: 0.08, green: 0.12, blue: 0.15, alpha: 0.82)
+                s.body.alpha = 1.0; s.body.glowWidth = 3
+                s.ghost1.alpha = 0; s.ghost2.alpha = 0
+                s.scanLines.alpha = 0.25 + s.edgeGlitchIntensity * 0.5
+                s.noDataLabel.alpha = 0; s.leftEye.alpha = 1; s.rightEye.alpha = 1
+            },
+        ])
+        node.run(seq)
     }
     
     // MARK: - Sleep
     
-    func enterSleep() {
+    func enterSleep(sound: Bool) {
         guard state != .sleep else { return }
         state = .sleep
-        
-        if soundEnabled { SoundGenerator.shared.playSleepSound() }
-        
-        // Fade creature
-        creature.run(SKAction.fadeAlpha(to: 0.4, duration: 2.0))
-        
-        // Eyes close
+        if sound { SoundGenerator.shared.playSleepSound() }
+        node.run(SKAction.fadeAlpha(to: 0.4, duration: 2.0))
         leftEye.run(SKAction.scaleY(to: 0.05, duration: 0.5))
         rightEye.run(SKAction.scaleY(to: 0.05, duration: 0.5))
-        
-        // Slow down breathing
         body.removeAction(forKey: "breathe")
-        let sleepBreathe = SKAction.sequence([
+        body.run(SKAction.repeatForever(SKAction.sequence([
             SKAction.scaleY(to: 1.02, duration: 4.0),
             SKAction.scaleY(to: 0.98, duration: 4.0)
-        ])
-        body.run(SKAction.repeatForever(sleepBreathe), withKey: "breathe")
-        
-        // Reduce particles
+        ])), withKey: "breathe")
         dustEmitter?.particleBirthRate = 0.5
-        
-        // Show Zzz animation
         animateZzz()
     }
     
     func animateZzz() {
         guard state == .sleep, let zzz = sleepZzz else { return }
-        zzz.text = ["z", "zz", "zzz"].randomElement()!
+        zzz.text = ["z","zz","zzz"].randomElement()!
         zzz.position = CGPoint(x: CGFloat.random(in: 12...18), y: 30)
-        
-        let float = SKAction.sequence([
-            SKAction.group([
-                SKAction.fadeAlpha(to: 0.6, duration: 0.3),
-                SKAction.moveBy(x: CGFloat.random(in: -3...5), y: 15, duration: 2.0),
-            ]),
+        zzz.run(SKAction.sequence([
+            SKAction.group([SKAction.fadeAlpha(to: 0.6, duration: 0.3), SKAction.moveBy(x: CGFloat.random(in: -3...5), y: 15, duration: 2.0)]),
             SKAction.fadeAlpha(to: 0, duration: 0.5),
-            SKAction.wait(forDuration: Double.random(in: 1.0...3.0)),
+            SKAction.wait(forDuration: Double.random(in: 1...3)),
             SKAction.run { [weak self] in self?.animateZzz() }
-        ])
-        zzz.run(float, withKey: "zzz")
+        ]), withKey: "zzz")
     }
     
-    func wakeUp() {
+    func wakeUp(sound: Bool) {
         guard state == .sleep else { return }
         state = .wakeUp
-        
-        if soundEnabled { SoundGenerator.shared.playChirp(frequency: 900, duration: 0.08) }
-        
-        sleepZzz?.removeAction(forKey: "zzz")
-        sleepZzz?.alpha = 0
-        
-        creature.run(SKAction.fadeAlpha(to: 1.0, duration: 0.5))
+        if sound { SoundGenerator.shared.playChirp(frequency: 900, duration: 0.08) }
+        sleepZzz?.removeAction(forKey: "zzz"); sleepZzz?.alpha = 0
+        node.run(SKAction.fadeAlpha(to: 1.0, duration: 0.5))
         leftEye.run(SKAction.scaleY(to: 1.0, duration: 0.3))
         rightEye.run(SKAction.scaleY(to: 1.0, duration: 0.3))
-        
-        // Restore normal breathing
         body.removeAction(forKey: "breathe")
-        let breathe = SKAction.sequence([
-            SKAction.scaleY(to: 1.04, duration: 2.5),
-            SKAction.scaleY(to: 0.97, duration: 2.5)
-        ])
-        body.run(SKAction.repeatForever(breathe), withKey: "breathe")
-        
+        body.run(SKAction.repeatForever(SKAction.sequence([
+            SKAction.scaleY(to: 1.04, duration: 2.5), SKAction.scaleY(to: 0.97, duration: 2.5)
+        ])), withKey: "breathe")
         dustEmitter?.particleBirthRate = 2.5
-        
-        // Brief startle glitch on wake
-        triggerGlitch(withNoData: false)
-        
+        triggerGlitch()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.state = .idle
-            self?.scheduleNextState()
+            self?.state = .idle; self?.scheduleNext()
         }
     }
     
-    // MARK: - Window Walking
-    
-    func tryWindowHop() {
-        guard !windowLedges.isEmpty else { return }
-        
-        // Pick a random ledge
-        let ledge = windowLedges.randomElement()!
-        currentLedge = ledge
-        
-        // Hop up to the window's title bar
-        let targetX = ledge.x + CGFloat.random(in: 20...(max(ledge.width - 20, 30)))
-        let targetY = ledge.y
-        
-        state = .windowHop
-        
-        if soundEnabled { SoundGenerator.shared.playChirp(frequency: 1400, duration: 0.04) }
-        
-        // Jump arc
-        let midY = max(creature.position.y, targetY) + 40
-        let jumpUp = SKAction.moveTo(y: midY, duration: 0.2)
-        jumpUp.timingMode = .easeOut
-        let moveOver = SKAction.moveTo(x: targetX, duration: 0.25)
-        moveOver.timingMode = .easeInEaseOut
-        let land = SKAction.moveTo(y: targetY, duration: 0.15)
-        land.timingMode = .easeIn
-        
-        let hop = SKAction.sequence([
-            SKAction.group([jumpUp, moveOver]),
-            land,
-            SKAction.run { [weak self] in
-                self?.state = .windowWalk
-                self?.targetLedgeY = targetY
-                self?.scheduleNextState()
-            }
-        ])
-        creature.run(hop)
+    func scheduleNext() {
+        nextStateChange = Double.random(in: 2...6)
+        stateTimer = 0
     }
     
-    func returnToGround() {
-        currentLedge = nil
-        targetLedgeY = nil
+    // MARK: - Flee from Densuke
+    
+    func startFlee(from dogX: CGFloat, screenWidth: CGFloat) {
+        state = .flee
+        // Run away from dog
+        let dir: CGFloat = dogX > node.position.x ? -1 : 1
+        fleeTarget = node.position.x + dir * CGFloat.random(in: 80...200)
+        fleeTarget = max(50, min(screenWidth - 50, fleeTarget!))
+        triggerGlitch(withNoData: true)
+    }
+}
+
+// MARK: - Densuke (Dog Entity)
+
+class Densuke {
+    let node: SKNode
+    let bodyShape: SKShapeNode
+    let leftEye: SKShapeNode
+    let rightEye: SKShapeNode
+    let nose: SKShapeNode
+    let tail: SKShapeNode
+    var trailEmitter: SKEmitterNode?
+    
+    var isActive: Bool = false
+    var targetIllegal: Illegal? = nil
+    var chaseTimer: TimeInterval = 0
+    var lifetime: TimeInterval = 0
+    var maxLifetime: TimeInterval
+    var sniffTimer: TimeInterval = 0
+    
+    enum DogState { case enter, wander, sniff, chase, exit }
+    var state: DogState = .enter
+    
+    init(maxLifetime: TimeInterval = 30) {
+        self.maxLifetime = maxLifetime
+        node = SKNode()
+        node.name = "densuke"
+        node.setScale(0.9)
         
-        if soundEnabled { SoundGenerator.shared.playChirp(frequency: 600, duration: 0.05) }
+        // Dog body — simple but recognizable dog silhouette
+        let dogPath = CGMutablePath()
+        // Body (horizontal oval-ish)
+        dogPath.move(to: CGPoint(x: -18, y: 0))
+        dogPath.addCurve(to: CGPoint(x: -12, y: 14), control1: CGPoint(x: -20, y: 6), control2: CGPoint(x: -16, y: 14))
+        // Head bump
+        dogPath.addCurve(to: CGPoint(x: -4, y: 22), control1: CGPoint(x: -10, y: 16), control2: CGPoint(x: -8, y: 22))
+        // Ear left
+        dogPath.addCurve(to: CGPoint(x: -2, y: 28), control1: CGPoint(x: -4, y: 25), control2: CGPoint(x: -3, y: 28))
+        dogPath.addCurve(to: CGPoint(x: 2, y: 22), control1: CGPoint(x: 0, y: 28), control2: CGPoint(x: 1, y: 25))
+        // Top of head
+        dogPath.addCurve(to: CGPoint(x: 8, y: 24), control1: CGPoint(x: 4, y: 22), control2: CGPoint(x: 6, y: 23))
+        // Ear right
+        dogPath.addCurve(to: CGPoint(x: 12, y: 28), control1: CGPoint(x: 9, y: 26), control2: CGPoint(x: 11, y: 28))
+        dogPath.addCurve(to: CGPoint(x: 14, y: 20), control1: CGPoint(x: 13, y: 27), control2: CGPoint(x: 14, y: 24))
+        // Snout
+        dogPath.addCurve(to: CGPoint(x: 20, y: 14), control1: CGPoint(x: 16, y: 18), control2: CGPoint(x: 19, y: 16))
+        dogPath.addCurve(to: CGPoint(x: 22, y: 10), control1: CGPoint(x: 22, y: 13), control2: CGPoint(x: 23, y: 11))
+        // Under jaw
+        dogPath.addCurve(to: CGPoint(x: 14, y: 8), control1: CGPoint(x: 20, y: 9), control2: CGPoint(x: 16, y: 8))
+        // Back/belly
+        dogPath.addCurve(to: CGPoint(x: 18, y: 0), control1: CGPoint(x: 16, y: 4), control2: CGPoint(x: 18, y: 2))
+        // Bottom
+        dogPath.addCurve(to: CGPoint(x: -18, y: 0), control1: CGPoint(x: 10, y: -3), control2: CGPoint(x: -10, y: -3))
+        dogPath.closeSubpath()
         
-        let fall = SKAction.moveTo(y: groundY, duration: 0.3)
-        fall.timingMode = .easeIn
-        creature.run(SKAction.sequence([
-            fall,
-            SKAction.run { [weak self] in
-                self?.state = .idle
-                self?.scheduleNextState()
-            }
+        bodyShape = SKShapeNode(path: dogPath)
+        // Densuke is a cyber-pet — more "solid" and lighter than Illegals
+        bodyShape.fillColor = NSColor(red: 0.65, green: 0.6, blue: 0.55, alpha: 0.75)
+        bodyShape.strokeColor = NSColor(red: 0.5, green: 0.45, blue: 0.4, alpha: 0.4)
+        bodyShape.lineWidth = 1.0
+        bodyShape.glowWidth = 2
+        node.addChild(bodyShape)
+        
+        // Eyes — warmer color than Illegals
+        leftEye = SKShapeNode(circleOfRadius: 2.5)
+        leftEye.fillColor = NSColor(red: 0.3, green: 0.25, blue: 0.15, alpha: 0.9)
+        leftEye.strokeColor = .clear; leftEye.position = CGPoint(x: 2, y: 20)
+        leftEye.glowWidth = 1; leftEye.zPosition = 5
+        node.addChild(leftEye)
+        
+        rightEye = SKShapeNode(circleOfRadius: 2.5)
+        rightEye.fillColor = NSColor(red: 0.3, green: 0.25, blue: 0.15, alpha: 0.9)
+        rightEye.strokeColor = .clear; rightEye.position = CGPoint(x: 10, y: 20)
+        rightEye.glowWidth = 1; rightEye.zPosition = 5
+        node.addChild(rightEye)
+        
+        // Nose
+        nose = SKShapeNode(circleOfRadius: 2)
+        nose.fillColor = NSColor(red: 0.2, green: 0.15, blue: 0.1, alpha: 0.9)
+        nose.strokeColor = .clear; nose.position = CGPoint(x: 20, y: 12)
+        nose.zPosition = 5
+        node.addChild(nose)
+        
+        // Tail
+        let tailPath = CGMutablePath()
+        tailPath.move(to: CGPoint(x: -18, y: 4))
+        tailPath.addCurve(to: CGPoint(x: -26, y: 16), control1: CGPoint(x: -22, y: 6), control2: CGPoint(x: -26, y: 12))
+        tail = SKShapeNode(path: tailPath)
+        tail.strokeColor = NSColor(red: 0.65, green: 0.6, blue: 0.55, alpha: 0.7)
+        tail.lineWidth = 2.5; tail.lineCap = .round
+        tail.zPosition = -1
+        node.addChild(tail)
+        
+        // Wag animation
+        let wag = SKAction.sequence([
+            SKAction.rotate(toAngle: 0.2, duration: 0.15),
+            SKAction.rotate(toAngle: -0.2, duration: 0.15),
+        ])
+        tail.run(SKAction.repeatForever(wag))
+        
+        // Trot animation (slight bob)
+        let trot = SKAction.sequence([
+            SKAction.moveBy(x: 0, y: 2, duration: 0.2),
+            SKAction.moveBy(x: 0, y: -2, duration: 0.2),
+        ])
+        bodyShape.run(SKAction.repeatForever(trot))
+        
+        node.alpha = 0
+    }
+    
+    func spawn(at x: CGFloat, groundY: CGFloat) {
+        isActive = true
+        lifetime = 0; chaseTimer = 0; sniffTimer = 0
+        state = .enter
+        node.position = CGPoint(x: x, y: groundY)
+        node.alpha = 0
+        node.run(SKAction.fadeAlpha(to: 1.0, duration: 0.5))
+    }
+    
+    func despawn() {
+        state = .exit
+        node.run(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0, duration: 1.0),
+            SKAction.run { [weak self] in self?.isActive = false; self?.targetIllegal = nil }
         ]))
     }
     
-    // MARK: - Update Loop
+    func update(dt: TimeInterval, illegals: [Illegal], screenWidth: CGFloat, groundY: CGFloat, sound: Bool) {
+        guard isActive else { return }
+        lifetime += dt
+        
+        if lifetime > maxLifetime && state != .exit {
+            despawn(); return
+        }
+        
+        let bob = CGFloat(sin(lifetime * 3)) * 1.0
+        node.position.y = groundY + bob
+        
+        switch state {
+        case .enter:
+            // Walk toward center
+            let centerX = screenWidth / 2
+            let dir: CGFloat = centerX > node.position.x ? 1 : -1
+            node.position.x += dir * 0.8
+            node.xScale = dir > 0 ? 1 : -1
+            if abs(node.position.x - centerX) < 50 { state = .wander; sniffTimer = 0 }
+            
+        case .wander:
+            // Wander randomly, occasionally sniff
+            sniffTimer += dt
+            node.position.x += (node.xScale > 0 ? 0.4 : -0.4)
+            if node.position.x < 50 { node.xScale = 1 }
+            if node.position.x > screenWidth - 50 { node.xScale = -1 }
+            
+            // After sniffing around, find an Illegal to chase
+            if sniffTimer > Double.random(in: 3...6) {
+                if let closest = illegals.min(by: { abs($0.node.position.x - node.position.x) < abs($1.node.position.x - node.position.x) }) {
+                    targetIllegal = closest
+                    state = .chase
+                    if sound { SoundGenerator.shared.playBark() }
+                }
+            }
+            
+        case .sniff:
+            // Pause and sniff (nose bob animation)
+            sniffTimer += dt
+            nose.position.y = 12 + CGFloat(sin(sniffTimer * 8)) * 1.5
+            if sniffTimer > 2 { state = .wander; sniffTimer = 0 }
+            
+        case .chase:
+            guard let target = targetIllegal else { state = .wander; return }
+            let dx = target.node.position.x - node.position.x
+            let dir: CGFloat = dx > 0 ? 1 : -1
+            node.xScale = dir > 0 ? 1 : -1
+            node.position.x += dir * 1.2 // Faster than Illegals
+            
+            // Make the Illegal flee
+            if target.state != .flee && target.state != .sleep {
+                target.startFlee(from: node.position.x, screenWidth: screenWidth)
+            }
+            
+            chaseTimer += dt
+            // Bark occasionally during chase
+            if chaseTimer.truncatingRemainder(dividingBy: 3.0) < dt && sound {
+                SoundGenerator.shared.playBark()
+            }
+            
+            // Stop chasing after a while or if close enough and it ran away
+            let dist = abs(dx)
+            if chaseTimer > 8 || dist > 300 {
+                targetIllegal = nil; state = .sniff; chaseTimer = 0; sniffTimer = 0
+            }
+            
+        case .exit:
+            break
+        }
+    }
+}
+
+// MARK: - Pet Scene
+
+class PetScene: SKScene {
+    var illegals: [Illegal] = []
+    var densuke: Densuke!
+    var soundEnabled: Bool = true
+    
+    var inactivityTimer: TimeInterval = 0
+    var systemCheckTimer: TimeInterval = 0
+    var windowScanTimer: TimeInterval = 0
+    var densukeSpawnTimer: TimeInterval = 0
+    var windowLedges: [WindowLedge] = []
+    var lastMousePosition: CGPoint = .zero
+    
+    let groundY: CGFloat = 60
+    let edgePanicZone: CGFloat = 80
+    let sleepAfterSeconds: TimeInterval = 180
+    
+    override func didMove(to view: SKView) {
+        backgroundColor = .clear
+        
+        // Main Illegal (leader)
+        let leader = Illegal(scale: 1.0, groundY: groundY, isLeader: true)
+        leader.node.position = CGPoint(x: size.width / 2, y: groundY)
+        leader.lastX = leader.node.position.x
+        addChild(leader.node)
+        illegals.append(leader)
+        
+        // Two companion Illegals (smaller)
+        for i in 0..<2 {
+            let scale = CGFloat.random(in: 0.55...0.75)
+            let companion = Illegal(scale: scale, groundY: groundY, isLeader: false)
+            let offset = CGFloat(i == 0 ? -60 : 60) + CGFloat.random(in: -20...20)
+            companion.node.position = CGPoint(x: size.width / 2 + offset, y: groundY)
+            companion.lastX = companion.node.position.x
+            companion.node.alpha = 0.85
+            addChild(companion.node)
+            illegals.append(companion)
+        }
+        
+        // Schedule states
+        for ill in illegals { ill.scheduleNext() }
+        
+        // Densuke (starts inactive)
+        densuke = Densuke(maxLifetime: Double.random(in: 20...40))
+        addChild(densuke.node)
+        
+        inactivityTimer = 0
+        densukeSpawnTimer = 0
+    }
+    
+    // MARK: - Update
     
     override func update(_ currentTime: TimeInterval) {
         let dt: TimeInterval = 1.0 / 60.0
-        stateTimer += dt
-        glitchTimer += dt
         inactivityTimer += dt
         systemCheckTimer += dt
         windowScanTimer += dt
+        densukeSpawnTimer += dt
         
-        // Periodic system state check
         if systemCheckTimer > 30 {
             SystemMonitor.shared.update()
             systemCheckTimer = 0
-            applySystemEffects()
         }
-        
-        // Periodic window scan for ledges
         if windowScanTimer > 10 {
             scanWindowLedges()
             windowScanTimer = 0
         }
         
-        // Sleep check
-        if state != .sleep && state != .wakeUp && inactivityTimer > sleepAfterSeconds {
-            enterSleep()
-            return
+        // Densuke spawn logic — appears every 60-120s for 20-40s
+        if !densuke.isActive && densukeSpawnTimer > Double.random(in: 60...120) {
+            let spawnX: CGFloat = Bool.random() ? -30 : size.width + 30
+            densuke.maxLifetime = Double.random(in: 20...40) // Doesn't work since let, but timer handles it
+            densuke.spawn(at: spawnX, groundY: groundY)
+            densukeSpawnTimer = 0
         }
         
-        // If sleeping, just bob gently
-        if state == .sleep {
-            let sleepBob = CGFloat(sin(currentTime * 0.8)) * 0.5
-            let baseY = targetLedgeY ?? groundY
-            creature.position.y = baseY + sleepBob
-            return
-        }
+        // Update Densuke
+        densuke.update(dt: dt, illegals: illegals, screenWidth: size.width, groundY: groundY, sound: soundEnabled)
         
-        if state == .wakeUp || state == .windowHop { return }
+        // Update each Illegal
+        let leaderPos = illegals.first?.node.position ?? .zero
         
-        // State transitions
-        if stateTimer >= nextStateChange {
-            transitionToNextState()
-        }
-        
-        // Edge panic
-        let leftDist = creature.position.x
-        let rightDist = size.width - creature.position.x
-        let edgeDist = min(leftDist, rightDist)
-        
-        if edgeDist < edgePanicZone {
-            edgeGlitchIntensity = 1.0 - (edgeDist / edgePanicZone)
-            scanLines.alpha = 0.25 + edgeGlitchIntensity * 0.5
-            if glitchTimer > Double(2.0 - edgeGlitchIntensity * 1.5) {
-                triggerGlitch(withNoData: edgeGlitchIntensity > 0.5)
-                glitchTimer = 0
+        for (index, ill) in illegals.enumerated() {
+            ill.stateTimer += dt
+            ill.glitchTimer += dt
+            
+            // Sleep check (only if leader triggers it)
+            if ill.isLeader && ill.state != .sleep && ill.state != .wakeUp && inactivityTimer > sleepAfterSeconds {
+                for i in illegals { i.enterSleep(sound: soundEnabled && i.isLeader) }
+                return
             }
-        } else {
-            edgeGlitchIntensity = 0
-            scanLines.alpha = 0.25
-            if glitchTimer > Double.random(in: 8.0...20.0) {
-                triggerGlitch(withNoData: Bool.random() && Bool.random())
-                glitchTimer = 0
+            
+            if ill.state == .sleep {
+                let bob = CGFloat(sin(currentTime * 0.8)) * 0.5
+                ill.node.position.y = (ill.targetLedgeY ?? groundY) + bob
+                continue
             }
-        }
-        
-        // Trail
-        let dx = abs(creature.position.x - lastCreatureX)
-        isMoving = dx > 0.3
-        lastCreatureX = creature.position.x
-        trailEmitter?.particleBirthRate = isMoving ? 12 : 0
-        
-        // Movement
-        let baseY = targetLedgeY ?? groundY
-        
-        switch state {
-        case .wanderLeft:
-            creature.position.x -= 0.5
-            creature.xScale = -1
-            // Boundary: screen edge or ledge edge
-            let leftBound: CGFloat = currentLedge?.x ?? 50
-            if creature.position.x < leftBound + 10 {
-                if currentLedge != nil {
-                    returnToGround()
+            if ill.state == .wakeUp || ill.state == .windowHop { continue }
+            
+            // Flee behavior
+            if ill.state == .flee {
+                if let target = ill.fleeTarget {
+                    let dir: CGFloat = target > ill.node.position.x ? 1 : -1
+                    ill.node.position.x += dir * 1.8 // Fast flee
+                    ill.node.xScale = dir > 0 ? 1 : -1
+                    ill.trailEmitter?.particleBirthRate = 18
+                    
+                    if abs(ill.node.position.x - target) < 5 {
+                        ill.state = .idle; ill.fleeTarget = nil; ill.scheduleNext()
+                        ill.trailEmitter?.particleBirthRate = 0
+                    }
+                    // Shared glitch: nearby illegals glitch sympathetically
+                    if ill.glitchTimer > 1 {
+                        ill.triggerGlitch(withNoData: true, sound: soundEnabled && ill.isLeader)
+                        ill.glitchTimer = 0
+                    }
                 } else {
-                    state = .wanderRight
+                    ill.state = .idle; ill.scheduleNext()
+                }
+                let bob = CGFloat(sin(currentTime * 4)) * 2 // panicked bob
+                ill.node.position.y = groundY + bob
+                continue
+            }
+            
+            // State transition
+            if ill.stateTimer >= ill.nextStateChange {
+                transitionState(for: ill, index: index)
+            }
+            
+            // Edge glitch
+            let leftDist = ill.node.position.x
+            let rightDist = size.width - ill.node.position.x
+            let edgeDist = min(leftDist, rightDist)
+            
+            if edgeDist < edgePanicZone {
+                ill.edgeGlitchIntensity = 1.0 - (edgeDist / edgePanicZone)
+                ill.scanLines.alpha = 0.25 + ill.edgeGlitchIntensity * 0.5
+                if ill.glitchTimer > Double(2.0 - ill.edgeGlitchIntensity * 1.5) {
+                    ill.triggerGlitch(withNoData: ill.edgeGlitchIntensity > 0.5, sound: soundEnabled && ill.isLeader)
+                    ill.glitchTimer = 0
+                    // Sympathetic glitch
+                    if ill.isLeader {
+                        for other in illegals where other !== ill {
+                            if Bool.random() { other.triggerGlitch() }
+                        }
+                    }
+                }
+            } else {
+                ill.edgeGlitchIntensity = 0
+                ill.scanLines.alpha = 0.25
+                if ill.glitchTimer > Double.random(in: 8...20) {
+                    ill.triggerGlitch(withNoData: Bool.random() && Bool.random(), sound: soundEnabled && ill.isLeader)
+                    ill.glitchTimer = 0
                 }
             }
-        case .wanderRight:
-            creature.position.x += 0.5
-            creature.xScale = 1
-            let rightBound: CGFloat = currentLedge.map { $0.x + $0.width } ?? (size.width - 50)
-            if creature.position.x > rightBound - 10 {
-                if currentLedge != nil {
-                    returnToGround()
-                } else {
-                    state = .wanderLeft
+            
+            // Trail
+            let dx = abs(ill.node.position.x - ill.lastX)
+            ill.isMoving = dx > 0.3
+            ill.lastX = ill.node.position.x
+            ill.trailEmitter?.particleBirthRate = ill.isMoving ? 12 : 0
+            
+            // Movement
+            let baseY = ill.targetLedgeY ?? groundY
+            let speed: CGFloat = ill.isLeader ? 0.5 : 0.4
+            
+            switch ill.state {
+            case .wanderLeft:
+                ill.node.position.x -= speed
+                ill.node.xScale = -1
+                if ill.node.position.x < 50 { ill.state = .wanderRight }
+            case .wanderRight:
+                ill.node.position.x += speed
+                ill.node.xScale = 1
+                if ill.node.position.x > size.width - 50 { ill.state = .wanderLeft }
+            case .idle, .windowWalk:
+                ill.node.position.x += CGFloat.random(in: -0.15...0.15)
+                // Companions drift toward leader
+                if !ill.isLeader {
+                    let toLeader = leaderPos.x - ill.node.position.x
+                    let flockPull: CGFloat = 0.02
+                    ill.node.position.x += toLeader * flockPull
+                    // Also maintain spacing
+                    for other in illegals where other !== ill {
+                        let sep = ill.node.position.x - other.node.position.x
+                        if abs(sep) < 25 {
+                            ill.node.position.x += (sep > 0 ? 0.1 : -0.1)
+                        }
+                    }
                 }
+            default: break
             }
-        case .idle, .windowWalk:
-            creature.position.x += CGFloat.random(in: -0.15...0.15)
-        default:
-            break
-        }
-        
-        // Floating bob
-        let bob = CGFloat(sin(currentTime * 2.0)) * 1.5
-        creature.position.y = baseY + bob
-        
-        // Scan line scroll
-        scanLines.position.y = 16 + CGFloat(sin(currentTime * 3.0)) * 0.5
-    }
-    
-    // MARK: - System Effects
-    
-    func applySystemEffects() {
-        let monitor = SystemMonitor.shared
-        
-        // Low battery → more glitchy, desaturated
-        if monitor.isLowBattery {
-            body.fillColor = NSColor(red: 0.06, green: 0.08, blue: 0.1, alpha: 0.85)
-            leftEye.fillColor = NSColor(red: 0.35, green: 0.65, blue: 0.6, alpha: 0.7)
-            rightEye.fillColor = NSColor(red: 0.35, green: 0.65, blue: 0.6, alpha: 0.7)
-            leftEye.glowWidth = 2
-            rightEye.glowWidth = 2
-        } else {
-            body.fillColor = NSColor(red: 0.08, green: 0.12, blue: 0.15, alpha: 0.82)
-            leftEye.fillColor = NSColor(red: 0.4, green: 0.85, blue: 0.8, alpha: 0.95)
-            rightEye.fillColor = NSColor(red: 0.4, green: 0.85, blue: 0.8, alpha: 0.95)
-            leftEye.glowWidth = 4
-            rightEye.glowWidth = 4
-        }
-        
-        // Night time → sleepier, dimmer eyes
-        if monitor.isNightTime && state != .sleep {
-            leftEye.glowWidth = max(leftEye.glowWidth - 1, 2)
-            rightEye.glowWidth = max(rightEye.glowWidth - 1, 2)
-            dustEmitter?.particleBirthRate = 1.5
+            
+            // Bob
+            let bobSpeed: CGFloat = ill.isLeader ? 2.0 : 2.0 + CGFloat(index) * 0.3
+            let bob = CGFloat(sin(currentTime * bobSpeed)) * 1.5
+            ill.node.position.y = baseY + bob
+            
+            // Scan line scroll
+            ill.scanLines.position.y = 16 + CGFloat(sin(currentTime * 3.0)) * 0.5
         }
     }
     
-    func transitionToNextState() {
-        // Window walking has a chance to trigger
-        let onGround = currentLedge == nil
+    func transitionState(for ill: Illegal, index: Int) {
         let roll = Double.random(in: 0...1)
         
-        if onGround {
-            switch roll {
-            case 0..<0.25:
-                state = .idle
-            case 0.25..<0.45:
-                state = .wanderLeft
-            case 0.45..<0.65:
-                state = .wanderRight
-            case 0.65..<0.8:
-                // Try to hop onto a window
-                if !windowLedges.isEmpty {
-                    tryWindowHop()
-                    return
+        if ill.isLeader {
+            let onGround = ill.currentLedge == nil
+            if onGround {
+                switch roll {
+                case 0..<0.25: ill.state = .idle
+                case 0.25..<0.45: ill.state = .wanderLeft
+                case 0.45..<0.65: ill.state = .wanderRight
+                case 0.65..<0.8:
+                    if !windowLedges.isEmpty { tryWindowHop(for: ill); return }
+                    ill.state = .idle
+                default: ill.state = .idle
                 }
-                state = .idle
-            default:
-                state = .idle
+            } else {
+                switch roll {
+                case 0..<0.3: ill.state = .windowWalk
+                case 0.3..<0.5: ill.state = .wanderLeft
+                case 0.5..<0.7: ill.state = .wanderRight
+                case 0.7..<0.85: returnToGround(for: ill); return
+                default: ill.state = .windowWalk
+                }
             }
         } else {
-            // On a window ledge
+            // Companions mostly follow leader
             switch roll {
-            case 0..<0.3:
-                state = .windowWalk
-            case 0.3..<0.5:
-                state = .wanderLeft
-            case 0.5..<0.7:
-                state = .wanderRight
-            case 0.7..<0.85:
-                returnToGround()
-                return
-            default:
-                // Hop to a different window
-                if windowLedges.count > 1 {
-                    tryWindowHop()
-                    return
-                }
-                state = .windowWalk
+            case 0..<0.4: ill.state = .idle
+            case 0.4..<0.6: ill.state = .wanderLeft
+            case 0.6..<0.8: ill.state = .wanderRight
+            default: ill.state = .idle
             }
         }
-        scheduleNextState()
+        ill.scheduleNext()
     }
     
-    // MARK: - Glitch Effects
+    // MARK: - Window Walking
     
-    func triggerGlitch(withNoData: Bool = false) {
-        if soundEnabled && withNoData {
-            SoundGenerator.shared.playGlitchSound()
+    func scanWindowLedges() {
+        windowLedges.removeAll()
+        guard let screen = NSScreen.main else { return }
+        let screenH = screen.frame.height
+        let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        for w in windowList {
+            guard let bounds = w[kCGWindowBounds as String] as? [String: CGFloat],
+                  let layer = w[kCGWindowLayer as String] as? Int,
+                  let owner = w[kCGWindowOwnerName as String] as? String else { continue }
+            guard layer == 0 else { continue }
+            if owner == "denno-pet" || owner == "Dock" || owner == "Window Server" { continue }
+            let x = bounds["X"] ?? 0; let y = bounds["Y"] ?? 0
+            let width = bounds["Width"] ?? 0; let height = bounds["Height"] ?? 0
+            guard width > 100 && height > 50 else { continue }
+            windowLedges.append(WindowLedge(x: x, y: screenH - y, width: width, windowName: owner))
         }
-        
-        let chromaIn = SKAction.run { [weak self] in
-            guard let self = self else { return }
-            let offsetX = CGFloat.random(in: 2...5)
-            self.bodyGhost1.position = CGPoint(x: -offsetX, y: CGFloat.random(in: -1...1))
-            self.bodyGhost2.position = CGPoint(x: offsetX, y: CGFloat.random(in: -1...1))
-            self.bodyGhost1.alpha = 0.5
-            self.bodyGhost2.alpha = 0.5
-        }
-        let chromaOut = SKAction.run { [weak self] in
-            self?.bodyGhost1.alpha = 0
-            self?.bodyGhost2.alpha = 0
-        }
-        
-        let bodyBlack = SKAction.run { [weak self] in
-            self?.body.fillColor = NSColor(red: 0.02, green: 0.02, blue: 0.03, alpha: 0.95)
-            self?.body.glowWidth = 0
-            self?.creature.position.x += CGFloat.random(in: -4...4)
-        }
-        let bodyFlicker = SKAction.run { [weak self] in
-            self?.body.alpha = CGFloat.random(in: 0.2...0.5)
-        }
-        let bodyRestore = SKAction.run { [weak self] in
-            self?.body.fillColor = NSColor(red: 0.08, green: 0.12, blue: 0.15, alpha: 0.82)
-            self?.body.alpha = 1.0
-            self?.body.glowWidth = 3
-        }
-        
-        let scanFlare = SKAction.run { [weak self] in
-            self?.scanLines.alpha = 0.7
-        }
-        let scanRestore = SKAction.run { [weak self] in
-            self?.scanLines.alpha = 0.25 + (self?.edgeGlitchIntensity ?? 0) * 0.5
-        }
-        
-        let noDataShow = SKAction.run { [weak self] in
-            guard let self = self, withNoData else { return }
-            self.noDataLabel.alpha = 0.9
-            self.noDataLabel2.alpha = 0.7
-            self.leftEye.alpha = 0
-            self.rightEye.alpha = 0
-        }
-        let noDataHide = SKAction.run { [weak self] in
-            self?.noDataLabel.alpha = 0
-            self?.noDataLabel2.alpha = 0
-            self?.leftEye.alpha = 1.0
-            self?.rightEye.alpha = 1.0
-        }
-        
-        let glitchSequence = SKAction.sequence([
-            chromaIn, bodyBlack, scanFlare, noDataShow,
-            SKAction.wait(forDuration: 0.04),
-            bodyFlicker,
-            SKAction.wait(forDuration: 0.03),
-            bodyRestore,
-            SKAction.wait(forDuration: 0.02),
-            bodyBlack,
-            SKAction.wait(forDuration: 0.05),
-            bodyFlicker,
-            SKAction.wait(forDuration: 0.03),
-            bodyRestore, chromaOut, scanRestore, noDataHide,
-        ])
-        creature.run(glitchSequence)
+        windowLedges.sort { $0.y > $1.y }
     }
     
-    // MARK: - Mouse Tracking
+    func tryWindowHop(for ill: Illegal) {
+        guard !windowLedges.isEmpty else { return }
+        let ledge = windowLedges.randomElement()!
+        ill.currentLedge = ledge
+        ill.state = .windowHop
+        let targetX = ledge.x + CGFloat.random(in: 20...max(ledge.width - 20, 30))
+        let targetY = ledge.y
+        if soundEnabled { SoundGenerator.shared.playChirp(frequency: 1400, duration: 0.04) }
+        let midY = max(ill.node.position.y, targetY) + 40
+        let jumpUp = SKAction.moveTo(y: midY, duration: 0.2); jumpUp.timingMode = .easeOut
+        let moveOver = SKAction.moveTo(x: targetX, duration: 0.25); moveOver.timingMode = .easeInEaseOut
+        let land = SKAction.moveTo(y: targetY, duration: 0.15); land.timingMode = .easeIn
+        ill.node.run(SKAction.sequence([
+            SKAction.group([jumpUp, moveOver]), land,
+            SKAction.run { ill.state = .windowWalk; ill.targetLedgeY = targetY; ill.scheduleNext() }
+        ]))
+    }
+    
+    func returnToGround(for ill: Illegal) {
+        ill.currentLedge = nil; ill.targetLedgeY = nil
+        if soundEnabled { SoundGenerator.shared.playChirp(frequency: 600, duration: 0.05) }
+        let fall = SKAction.moveTo(y: groundY, duration: 0.3); fall.timingMode = .easeIn
+        ill.node.run(SKAction.sequence([fall, SKAction.run { ill.state = .idle; ill.scheduleNext() }]))
+    }
+    
+    // MARK: - Mouse
     
     func handleGlobalMouse(at location: CGPoint) {
-        // Any mouse movement resets inactivity
         inactivityTimer = 0
-        if state == .sleep { wakeUp(); return }
         
-        let dx = location.x - creature.position.x
-        let dy = location.y - creature.position.y
-        let distance = sqrt(dx * dx + dy * dy)
-        
-        let mouseDelta = sqrt(
-            pow(location.x - lastMousePosition.x, 2) +
-            pow(location.y - lastMousePosition.y, 2)
-        )
+        let mouseDelta = sqrt(pow(location.x - lastMousePosition.x, 2) + pow(location.y - lastMousePosition.y, 2))
         lastMousePosition = location
         
-        if distance < 200 && distance > 0 {
-            let eyeOffset = min(dx / distance * 2, 2)
-            leftEye.position.x = -7 + eyeOffset
-            rightEye.position.x = 7 + eyeOffset
+        for ill in illegals {
+            if ill.state == .sleep { ill.wakeUp(sound: soundEnabled && ill.isLeader); continue }
             
-            if mouseDelta > 50 && distance < 100 {
-                triggerStartle(awayFrom: location)
+            let dx = location.x - ill.node.position.x
+            let dy = location.y - ill.node.position.y
+            let dist = sqrt(dx * dx + dy * dy)
+            
+            if dist < 200 && dist > 0 {
+                let eyeOff = min(dx / dist * 2, 2)
+                ill.leftEye.position.x = -7 + eyeOff
+                ill.rightEye.position.x = 7 + eyeOff
+                
+                if mouseDelta > 50 && dist < 100 && ill.state != .flee {
+                    triggerStartle(for: ill, awayFrom: location)
+                }
+            } else {
+                ill.leftEye.position.x = -7
+                ill.rightEye.position.x = 7
             }
-        } else {
-            leftEye.position.x = -7
-            rightEye.position.x = 7
         }
     }
     
     func handleGlobalClick(at location: CGPoint) {
         inactivityTimer = 0
-        if state == .sleep { wakeUp(); return }
         
-        let dx = location.x - creature.position.x
-        let dy = location.y - creature.position.y
-        let distance = sqrt(dx * dx + dy * dy)
-        
-        if distance < 40 {
-            if soundEnabled { SoundGenerator.shared.playHappyChirp() }
-            
-            let happyPulse = SKAction.sequence([
-                SKAction.scale(to: 1.15, duration: 0.1),
-                SKAction.scale(to: 1.0, duration: 0.2),
-            ])
-            creature.run(happyPulse)
-            leftEye.run(SKAction.sequence([
-                SKAction.scaleY(to: 0.5, duration: 0.1),
-                SKAction.scaleY(to: 1.0, duration: 0.3),
-            ]))
-            rightEye.run(SKAction.sequence([
-                SKAction.scaleY(to: 0.5, duration: 0.1),
-                SKAction.scaleY(to: 1.0, duration: 0.3),
-            ]))
+        for ill in illegals {
+            if ill.state == .sleep { ill.wakeUp(sound: soundEnabled && ill.isLeader); continue }
+            let dx = location.x - ill.node.position.x
+            let dy = location.y - ill.node.position.y
+            if sqrt(dx * dx + dy * dy) < 40 * ill.scale {
+                if soundEnabled { SoundGenerator.shared.playHappyChirp() }
+                ill.node.run(SKAction.sequence([
+                    SKAction.scale(to: ill.scale * 1.15, duration: 0.1),
+                    SKAction.scale(to: ill.scale, duration: 0.2)
+                ]))
+                ill.leftEye.run(SKAction.sequence([SKAction.scaleY(to: 0.5, duration: 0.1), SKAction.scaleY(to: 1.0, duration: 0.3)]))
+                ill.rightEye.run(SKAction.sequence([SKAction.scaleY(to: 0.5, duration: 0.1), SKAction.scaleY(to: 1.0, duration: 0.3)]))
+                break
+            }
         }
     }
     
-    func triggerStartle(awayFrom point: CGPoint) {
-        let jumpDir: CGFloat = point.x > creature.position.x ? -1 : 1
-        let baseY = targetLedgeY ?? groundY
-        let jumpAction = SKAction.sequence([
+    func triggerStartle(for ill: Illegal, awayFrom point: CGPoint) {
+        let jumpDir: CGFloat = point.x > ill.node.position.x ? -1 : 1
+        let baseY = ill.targetLedgeY ?? groundY
+        ill.node.run(SKAction.sequence([
             SKAction.moveBy(x: jumpDir * 30, y: 20, duration: 0.15),
-            SKAction.moveTo(y: baseY, duration: 0.2),
-        ])
-        jumpAction.timingMode = .easeOut
-        creature.run(jumpAction)
-        triggerGlitch(withNoData: true)
+            SKAction.moveTo(y: baseY, duration: 0.2)
+        ]))
+        ill.triggerGlitch(withNoData: true, sound: soundEnabled && ill.isLeader)
+        // Sympathetic startle
+        for other in illegals where other !== ill {
+            if abs(other.node.position.x - ill.node.position.x) < 100 {
+                other.triggerGlitch()
+            }
+        }
     }
 }
 
@@ -1009,12 +1009,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let screen = NSScreen.main else { return }
-        
-        // Initial system check
         SystemMonitor.shared.update()
         
         window = PetWindow(forScreen: screen)
-        
         let skView = PetSKView(frame: screen.frame)
         skView.allowsTransparency = true
         skView.preferredFramesPerSecond = 60
@@ -1026,42 +1023,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         window.contentView = skView
         window.makeKeyAndOrderFront(nil)
-        
         setupStatusItem()
         
-        NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+        NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
             guard let self = self else { return }
-            let screenPoint = NSEvent.mouseLocation
-            let windowPoint = self.window.convertPoint(fromScreen: screenPoint)
-            let scenePoint = skView.convert(windowPoint, to: self.scene)
-            self.scene.handleGlobalMouse(at: scenePoint)
+            let sp = NSEvent.mouseLocation
+            let wp = self.window.convertPoint(fromScreen: sp)
+            self.scene.handleGlobalMouse(at: skView.convert(wp, to: self.scene))
         }
-        
-        NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+        NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
             guard let self = self else { return }
-            let screenPoint = NSEvent.mouseLocation
-            let windowPoint = self.window.convertPoint(fromScreen: screenPoint)
-            let scenePoint = skView.convert(windowPoint, to: self.scene)
-            self.scene.handleGlobalClick(at: scenePoint)
+            let sp = NSEvent.mouseLocation
+            let wp = self.window.convertPoint(fromScreen: sp)
+            self.scene.handleGlobalClick(at: skView.convert(wp, to: self.scene))
         }
     }
     
     func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = statusItem.button {
-            button.title = "👾"
-        }
-        
+        statusItem.button?.title = "👾"
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Dennō Pet", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem.separator())
-        
+        menu.addItem(.separator())
         let soundItem = NSMenuItem(title: "Sound Effects", action: #selector(toggleSound(_:)), keyEquivalent: "s")
-        soundItem.target = self
-        soundItem.state = .on
+        soundItem.target = self; soundItem.state = .on
         menu.addItem(soundItem)
-        
-        menu.addItem(NSMenuItem.separator())
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
     }
