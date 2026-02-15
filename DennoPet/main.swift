@@ -477,141 +477,268 @@ class Densuke {
         node.name = "densuke"
         node.setScale(0.9)
         
-        // Densuke — cream/yellow-white chubby puppy dog
-        // Inspired by the actual Dennō Coil design: round, soft, friendly
-        // Looks like a small Labrador/Shiba puppy
-        let dogPath = CGMutablePath()
+        // === DENSUKE — accurate to Dennō Coil reference ===
+        // Potato-shaped body, HUGE round eyes, tiny pointed ears UP,
+        // red collar with gold tag, super stubby legs, curled tail
         
-        // Start at bottom-left of body
-        dogPath.move(to: CGPoint(x: -20, y: 2))
-        // Back haunch (chubby rear)
-        dogPath.addCurve(to: CGPoint(x: -16, y: 12),
-                         control1: CGPoint(x: -22, y: 5),
-                         control2: CGPoint(x: -20, y: 10))
-        // Back (gentle slope up to head)
-        dogPath.addCurve(to: CGPoint(x: -4, y: 18),
-                         control1: CGPoint(x: -12, y: 14),
-                         control2: CGPoint(x: -8, y: 17))
-        // Back of head (round)
-        dogPath.addCurve(to: CGPoint(x: 2, y: 26),
-                         control1: CGPoint(x: -2, y: 20),
-                         control2: CGPoint(x: -1, y: 24))
-        // Left floppy ear (droops down from head)
-        dogPath.addCurve(to: CGPoint(x: -4, y: 20),
-                         control1: CGPoint(x: -1, y: 27),
-                         control2: CGPoint(x: -4, y: 24))
-        dogPath.addCurve(to: CGPoint(x: 0, y: 16),
-                         control1: CGPoint(x: -5, y: 17),
-                         control2: CGPoint(x: -2, y: 16))
-        // Top of head (round dome)
-        dogPath.addCurve(to: CGPoint(x: 12, y: 26),
-                         control1: CGPoint(x: 3, y: 20),
-                         control2: CGPoint(x: 8, y: 26))
-        // Right floppy ear (droops down)
-        dogPath.addCurve(to: CGPoint(x: 18, y: 20),
-                         control1: CGPoint(x: 16, y: 27),
-                         control2: CGPoint(x: 18, y: 24))
-        dogPath.addCurve(to: CGPoint(x: 14, y: 22),
-                         control1: CGPoint(x: 19, y: 17),
-                         control2: CGPoint(x: 16, y: 19))
-        // Forehead down to snout
+        // --- Main body: very round potato/barrel shape ---
+        let dogPath = CGMutablePath()
+        dogPath.move(to: CGPoint(x: -16, y: 0))
+        // Left rear, up the back (very round)
+        dogPath.addCurve(to: CGPoint(x: -18, y: 14),
+                         control1: CGPoint(x: -22, y: 2),
+                         control2: CGPoint(x: -22, y: 10))
+        // Back up to neck
+        dogPath.addCurve(to: CGPoint(x: -6, y: 20),
+                         control1: CGPoint(x: -16, y: 18),
+                         control2: CGPoint(x: -10, y: 20))
+        // Head — large, round (almost spherical, nearly as wide as body)
+        dogPath.addCurve(to: CGPoint(x: 4, y: 30),
+                         control1: CGPoint(x: -4, y: 22),
+                         control2: CGPoint(x: -2, y: 28))
+        // Top of head dome
+        dogPath.addCurve(to: CGPoint(x: 16, y: 30),
+                         control1: CGPoint(x: 8, y: 34),
+                         control2: CGPoint(x: 12, y: 34))
+        // Front of head down to snout
+        dogPath.addCurve(to: CGPoint(x: 22, y: 22),
+                         control1: CGPoint(x: 20, y: 28),
+                         control2: CGPoint(x: 22, y: 26))
+        // Snout — short, rounded bump
+        dogPath.addCurve(to: CGPoint(x: 26, y: 18),
+                         control1: CGPoint(x: 24, y: 22),
+                         control2: CGPoint(x: 26, y: 20))
         dogPath.addCurve(to: CGPoint(x: 22, y: 16),
-                         control1: CGPoint(x: 16, y: 22),
-                         control2: CGPoint(x: 20, y: 20))
-        // Snout (short, rounded — puppy face)
-        dogPath.addCurve(to: CGPoint(x: 26, y: 13),
-                         control1: CGPoint(x: 24, y: 16),
-                         control2: CGPoint(x: 26, y: 15))
-        dogPath.addCurve(to: CGPoint(x: 22, y: 10),
-                         control1: CGPoint(x: 27, y: 12),
-                         control2: CGPoint(x: 25, y: 10))
-        // Under chin
-        dogPath.addCurve(to: CGPoint(x: 16, y: 10),
-                         control1: CGPoint(x: 20, y: 10),
-                         control2: CGPoint(x: 18, y: 10))
-        // Chest (round, chubby)
-        dogPath.addCurve(to: CGPoint(x: 18, y: 2),
-                         control1: CGPoint(x: 18, y: 7),
-                         control2: CGPoint(x: 20, y: 4))
-        // Front legs (stubby)
-        dogPath.addCurve(to: CGPoint(x: 14, y: -2),
-                         control1: CGPoint(x: 18, y: 0),
-                         control2: CGPoint(x: 16, y: -2))
-        dogPath.addLine(to: CGPoint(x: 10, y: -2))
-        dogPath.addCurve(to: CGPoint(x: 8, y: 2),
-                         control1: CGPoint(x: 9, y: -1),
-                         control2: CGPoint(x: 8, y: 0))
-        // Belly (round, sags slightly)
-        dogPath.addCurve(to: CGPoint(x: -6, y: 0),
-                         control1: CGPoint(x: 4, y: -1),
-                         control2: CGPoint(x: -2, y: -2))
-        // Rear legs (stubby)
-        dogPath.addCurve(to: CGPoint(x: -10, y: -2),
-                         control1: CGPoint(x: -8, y: -1),
-                         control2: CGPoint(x: -10, y: -1))
-        dogPath.addLine(to: CGPoint(x: -14, y: -2))
-        dogPath.addCurve(to: CGPoint(x: -20, y: 2),
-                         control1: CGPoint(x: -16, y: -2),
-                         control2: CGPoint(x: -20, y: -1))
+                         control1: CGPoint(x: 27, y: 17),
+                         control2: CGPoint(x: 25, y: 16))
+        // Under chin / chest
+        dogPath.addCurve(to: CGPoint(x: 18, y: 10),
+                         control1: CGPoint(x: 20, y: 14),
+                         control2: CGPoint(x: 20, y: 12))
+        // Chest rounds down to belly
+        dogPath.addCurve(to: CGPoint(x: 16, y: 0),
+                         control1: CGPoint(x: 20, y: 6),
+                         control2: CGPoint(x: 20, y: 2))
+        // Flat bottom (stubby legs implied)
+        dogPath.addLine(to: CGPoint(x: -16, y: 0))
         dogPath.closeSubpath()
         
+        // --- Cel-shading: outline layer (slightly larger, dark) ---
+        let outlineShape = SKShapeNode(path: dogPath)
+        outlineShape.fillColor = .clear
+        outlineShape.strokeColor = NSColor(red: 0.35, green: 0.3, blue: 0.2, alpha: 0.85)
+        outlineShape.lineWidth = 2.5
+        outlineShape.glowWidth = 0
+        outlineShape.zPosition = 3
+        node.addChild(outlineShape)
+        
+        // --- Body fill: warm cream ---
         bodyShape = SKShapeNode(path: dogPath)
-        // Densuke's cream/yellowish-white color — warm, soft, "solid" digital pet
-        bodyShape.fillColor = NSColor(red: 0.95, green: 0.92, blue: 0.82, alpha: 0.88)
-        bodyShape.strokeColor = NSColor(red: 0.8, green: 0.75, blue: 0.6, alpha: 0.4)
-        bodyShape.lineWidth = 1.0
-        bodyShape.glowWidth = 1.5
+        bodyShape.fillColor = NSColor(red: 0.94, green: 0.9, blue: 0.78, alpha: 0.95)
+        bodyShape.strokeColor = .clear
+        bodyShape.lineWidth = 0
+        bodyShape.glowWidth = 0
         node.addChild(bodyShape)
         
-        // Eyes — small, dark, round (classic anime dog eyes)
-        leftEye = SKShapeNode(circleOfRadius: 2.0)
-        leftEye.fillColor = NSColor(red: 0.15, green: 0.12, blue: 0.08, alpha: 0.95)
+        // --- Cel shadow: darker zone on belly/lower body ---
+        let shadowPath = CGMutablePath()
+        shadowPath.move(to: CGPoint(x: -18, y: 0))
+        shadowPath.addCurve(to: CGPoint(x: -18, y: 10),
+                            control1: CGPoint(x: -22, y: 2),
+                            control2: CGPoint(x: -22, y: 7))
+        shadowPath.addCurve(to: CGPoint(x: 18, y: 10),
+                            control1: CGPoint(x: -8, y: 8),
+                            control2: CGPoint(x: 8, y: 8))
+        shadowPath.addCurve(to: CGPoint(x: 18, y: 0),
+                            control1: CGPoint(x: 22, y: 7),
+                            control2: CGPoint(x: 22, y: 2))
+        shadowPath.addLine(to: CGPoint(x: -18, y: 0))
+        shadowPath.closeSubpath()
+        
+        let shadowCrop = SKCropNode()
+        let shadowMask = SKShapeNode(path: dogPath)
+        shadowMask.fillColor = .white; shadowMask.strokeColor = .clear
+        shadowCrop.maskNode = shadowMask
+        let shadowShape = SKShapeNode(path: shadowPath)
+        shadowShape.fillColor = NSColor(red: 0.85, green: 0.78, blue: 0.6, alpha: 0.5)
+        shadowShape.strokeColor = .clear
+        shadowCrop.addChild(shadowShape)
+        shadowCrop.zPosition = 1
+        node.addChild(shadowCrop)
+        
+        // --- Highlight: bright spot on top of head ---
+        let highlight = SKShapeNode(ellipseOf: CGSize(width: 10, height: 6))
+        highlight.fillColor = NSColor(red: 1.0, green: 0.98, blue: 0.92, alpha: 0.5)
+        highlight.strokeColor = .clear
+        highlight.position = CGPoint(x: 8, y: 30)
+        highlight.zPosition = 2
+        node.addChild(highlight)
+        
+        // --- Stubby legs (4 small rectangles) ---
+        let legColor = NSColor(red: 0.9, green: 0.85, blue: 0.72, alpha: 0.95)
+        let legOutline = NSColor(red: 0.35, green: 0.3, blue: 0.2, alpha: 0.7)
+        for lx in [CGFloat(-12), CGFloat(-6), CGFloat(8), CGFloat(14)] {
+            let leg = SKShapeNode(rect: CGRect(x: lx - 2, y: -6, width: 4, height: 7), cornerRadius: 1.5)
+            leg.fillColor = legColor
+            leg.strokeColor = legOutline
+            leg.lineWidth = 1.5
+            leg.zPosition = -1
+            node.addChild(leg)
+        }
+        
+        // --- Pointed ears (stick UP, small triangles) ---
+        let earColor = NSColor(red: 0.92, green: 0.87, blue: 0.72, alpha: 0.95)
+        let earInner = NSColor(red: 0.85, green: 0.7, blue: 0.55, alpha: 0.7)
+        
+        // Left ear
+        let leftEarPath = CGMutablePath()
+        leftEarPath.move(to: CGPoint(x: 2, y: 30))
+        leftEarPath.addLine(to: CGPoint(x: -2, y: 40))
+        leftEarPath.addLine(to: CGPoint(x: 7, y: 32))
+        leftEarPath.closeSubpath()
+        let leftEar = SKShapeNode(path: leftEarPath)
+        leftEar.fillColor = earColor
+        leftEar.strokeColor = NSColor(red: 0.35, green: 0.3, blue: 0.2, alpha: 0.85)
+        leftEar.lineWidth = 2.0; leftEar.zPosition = -1
+        node.addChild(leftEar)
+        // Inner ear
+        let leftInner = SKShapeNode(path: {
+            let p = CGMutablePath(); p.move(to: CGPoint(x: 2, y: 31))
+            p.addLine(to: CGPoint(x: 0, y: 37)); p.addLine(to: CGPoint(x: 5, y: 32)); p.closeSubpath(); return p
+        }())
+        leftInner.fillColor = earInner; leftInner.strokeColor = .clear; leftInner.zPosition = 0
+        node.addChild(leftInner)
+        
+        // Right ear
+        let rightEarPath = CGMutablePath()
+        rightEarPath.move(to: CGPoint(x: 14, y: 30))
+        rightEarPath.addLine(to: CGPoint(x: 20, y: 40))
+        rightEarPath.addLine(to: CGPoint(x: 18, y: 32))
+        rightEarPath.closeSubpath()
+        let rightEar = SKShapeNode(path: rightEarPath)
+        rightEar.fillColor = earColor
+        rightEar.strokeColor = NSColor(red: 0.35, green: 0.3, blue: 0.2, alpha: 0.85)
+        rightEar.lineWidth = 2.0; rightEar.zPosition = -1
+        node.addChild(rightEar)
+        let rightInner = SKShapeNode(path: {
+            let p = CGMutablePath(); p.move(to: CGPoint(x: 15, y: 31))
+            p.addLine(to: CGPoint(x: 19, y: 37)); p.addLine(to: CGPoint(x: 17, y: 32)); p.closeSubpath(); return p
+        }())
+        rightInner.fillColor = earInner; rightInner.strokeColor = .clear; rightInner.zPosition = 0
+        node.addChild(rightInner)
+        
+        // --- Eyes: HUGE round, with big dark pupils (Densuke's signature) ---
+        // Eye whites
+        let eyeWhiteL = SKShapeNode(circleOfRadius: 5.5)
+        eyeWhiteL.fillColor = NSColor(red: 0.98, green: 0.97, blue: 0.95, alpha: 1.0)
+        eyeWhiteL.strokeColor = NSColor(red: 0.35, green: 0.3, blue: 0.2, alpha: 0.8)
+        eyeWhiteL.lineWidth = 1.5
+        eyeWhiteL.position = CGPoint(x: 8, y: 24)
+        eyeWhiteL.zPosition = 4
+        node.addChild(eyeWhiteL)
+        
+        let eyeWhiteR = SKShapeNode(circleOfRadius: 5.5)
+        eyeWhiteR.fillColor = NSColor(red: 0.98, green: 0.97, blue: 0.95, alpha: 1.0)
+        eyeWhiteR.strokeColor = NSColor(red: 0.35, green: 0.3, blue: 0.2, alpha: 0.8)
+        eyeWhiteR.lineWidth = 1.5
+        eyeWhiteR.position = CGPoint(x: 18, y: 24)
+        eyeWhiteR.zPosition = 4
+        node.addChild(eyeWhiteR)
+        
+        // Pupils (large, dark)
+        leftEye = SKShapeNode(circleOfRadius: 3.5)
+        leftEye.fillColor = NSColor(red: 0.12, green: 0.1, blue: 0.08, alpha: 1.0)
         leftEye.strokeColor = .clear
-        leftEye.position = CGPoint(x: 8, y: 20)
-        leftEye.glowWidth = 0.5; leftEye.zPosition = 5
+        leftEye.position = CGPoint(x: 9, y: 23)
+        leftEye.zPosition = 5
         node.addChild(leftEye)
         
-        rightEye = SKShapeNode(circleOfRadius: 2.0)
-        rightEye.fillColor = NSColor(red: 0.15, green: 0.12, blue: 0.08, alpha: 0.95)
+        rightEye = SKShapeNode(circleOfRadius: 3.5)
+        rightEye.fillColor = NSColor(red: 0.12, green: 0.1, blue: 0.08, alpha: 1.0)
         rightEye.strokeColor = .clear
-        rightEye.position = CGPoint(x: 16, y: 20)
-        rightEye.glowWidth = 0.5; rightEye.zPosition = 5
+        rightEye.position = CGPoint(x: 19, y: 23)
+        rightEye.zPosition = 5
         node.addChild(rightEye)
         
-        // Nose — small, dark, at tip of snout
-        nose = SKShapeNode(circleOfRadius: 1.8)
-        nose.fillColor = NSColor(red: 0.18, green: 0.15, blue: 0.12, alpha: 0.95)
-        nose.strokeColor = .clear
-        nose.position = CGPoint(x: 25, y: 14)
+        // Pupil highlights (small white dots)
+        let hlL = SKShapeNode(circleOfRadius: 1.2)
+        hlL.fillColor = .white; hlL.strokeColor = .clear
+        hlL.position = CGPoint(x: 8, y: 24.5); hlL.zPosition = 6
+        node.addChild(hlL)
+        let hlR = SKShapeNode(circleOfRadius: 1.2)
+        hlR.fillColor = .white; hlR.strokeColor = .clear
+        hlR.position = CGPoint(x: 18, y: 24.5); hlR.zPosition = 6
+        node.addChild(hlR)
+        
+        // --- Nose: dark, at tip of snout ---
+        nose = SKShapeNode(circleOfRadius: 2.2)
+        nose.fillColor = NSColor(red: 0.2, green: 0.15, blue: 0.1, alpha: 1.0)
+        nose.strokeColor = NSColor(red: 0.35, green: 0.3, blue: 0.2, alpha: 0.6)
+        nose.lineWidth = 1.0
+        nose.position = CGPoint(x: 25, y: 18)
         nose.zPosition = 5
         node.addChild(nose)
         
-        // Tail — short, curled upward (happy puppy tail)
+        // --- Mouth: simple line ---
+        let mouthPath = CGMutablePath()
+        mouthPath.move(to: CGPoint(x: 22, y: 16))
+        mouthPath.addCurve(to: CGPoint(x: 18, y: 15),
+                           control1: CGPoint(x: 21, y: 15),
+                           control2: CGPoint(x: 19, y: 14.5))
+        let mouth = SKShapeNode(path: mouthPath)
+        mouth.strokeColor = NSColor(red: 0.35, green: 0.3, blue: 0.2, alpha: 0.7)
+        mouth.lineWidth = 1.2; mouth.lineCap = .round
+        mouth.zPosition = 5
+        node.addChild(mouth)
+        
+        // --- Red collar with gold tag ---
+        let collarPath = CGMutablePath()
+        collarPath.move(to: CGPoint(x: -4, y: 18))
+        collarPath.addCurve(to: CGPoint(x: 20, y: 16),
+                            control1: CGPoint(x: 4, y: 16),
+                            control2: CGPoint(x: 14, y: 15))
+        let collar = SKShapeNode(path: collarPath)
+        collar.strokeColor = NSColor(red: 0.8, green: 0.15, blue: 0.1, alpha: 0.9)
+        collar.lineWidth = 3.0; collar.lineCap = .round
+        collar.zPosition = 3
+        node.addChild(collar)
+        
+        // Gold tag
+        let tag = SKShapeNode(circleOfRadius: 2.5)
+        tag.fillColor = NSColor(red: 0.9, green: 0.75, blue: 0.2, alpha: 0.95)
+        tag.strokeColor = NSColor(red: 0.7, green: 0.55, blue: 0.1, alpha: 0.8)
+        tag.lineWidth = 0.8
+        tag.position = CGPoint(x: 10, y: 14)
+        tag.zPosition = 4
+        node.addChild(tag)
+        
+        // --- Tail: short, curled up (happy) ---
         let tailPath = CGMutablePath()
-        tailPath.move(to: CGPoint(x: -20, y: 8))
-        tailPath.addCurve(to: CGPoint(x: -28, y: 18),
-                          control1: CGPoint(x: -24, y: 10),
-                          control2: CGPoint(x: -28, y: 14))
-        tailPath.addCurve(to: CGPoint(x: -24, y: 20),
-                          control1: CGPoint(x: -28, y: 20),
-                          control2: CGPoint(x: -26, y: 21))
+        tailPath.move(to: CGPoint(x: -16, y: 12))
+        tailPath.addCurve(to: CGPoint(x: -24, y: 22),
+                          control1: CGPoint(x: -20, y: 14),
+                          control2: CGPoint(x: -24, y: 18))
+        tailPath.addCurve(to: CGPoint(x: -20, y: 24),
+                          control1: CGPoint(x: -24, y: 24),
+                          control2: CGPoint(x: -22, y: 25))
         tail = SKShapeNode(path: tailPath)
-        tail.strokeColor = NSColor(red: 0.92, green: 0.88, blue: 0.75, alpha: 0.8)
-        tail.lineWidth = 3.0; tail.lineCap = .round
+        tail.strokeColor = NSColor(red: 0.35, green: 0.3, blue: 0.2, alpha: 0.85)
+        tail.fillColor = NSColor(red: 0.92, green: 0.87, blue: 0.72, alpha: 0.95)
+        tail.lineWidth = 2.0; tail.lineCap = .round
         tail.zPosition = -1
         node.addChild(tail)
         
-        // Wag animation (happy, faster)
+        // Wag animation
         let wag = SKAction.sequence([
-            SKAction.rotate(toAngle: 0.25, duration: 0.12),
-            SKAction.rotate(toAngle: -0.25, duration: 0.12),
+            SKAction.rotate(toAngle: 0.3, duration: 0.1),
+            SKAction.rotate(toAngle: -0.3, duration: 0.1),
         ])
         tail.run(SKAction.repeatForever(wag))
         
-        // Trot animation (bouncy puppy)
+        // Trot animation (bouncy)
         let trot = SKAction.sequence([
-            SKAction.moveBy(x: 0, y: 2.5, duration: 0.18),
-            SKAction.moveBy(x: 0, y: -2.5, duration: 0.18),
+            SKAction.moveBy(x: 0, y: 2.5, duration: 0.16),
+            SKAction.moveBy(x: 0, y: -2.5, duration: 0.16),
         ])
         bodyShape.run(SKAction.repeatForever(trot))
         
@@ -786,7 +913,7 @@ class PetScene: SKScene {
         }
         
         // Densuke spawn logic — appears every 60-120s for 20-40s
-        if !densuke.isActive && densukeSpawnTimer > Double.random(in: 60...120) {
+        if !densuke.isActive && densukeSpawnTimer > Double.random(in: 15...30) {
             let spawnX: CGFloat = Bool.random() ? -30 : size.width + 30
             densuke.maxLifetime = Double.random(in: 20...40) // Doesn't work since let, but timer handles it
             densuke.spawn(at: spawnX, groundY: groundY)
